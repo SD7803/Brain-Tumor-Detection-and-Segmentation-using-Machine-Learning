@@ -58,7 +58,9 @@ All non-zero labels are merged into a single binary **Whole Tumor (WT)** mask (`
 ## 3. Methodology
 
 ### 3.1 Data loading & preprocessing
-A custom `BraTS2020Loader` class reads the 5 NIfTI volumes per patient, extracts one axial slice (`slice_idx = 77`), clips intensities to the 1st–99th percentile to suppress outlier voxels, normalizes to `[0,1]`, and resizes to 128×128. Of 369 patient folders, **368 loaded successfully** (1 failed/skipped). The loader also supports multi-slice sampling (`slice_range=(55,100)`, step 5) for richer training data, though the single-slice mode was used for the models trained here.
+A custom `BraTS2020Loader` class reads the 5 NIfTI volumes per patient, extracts one axial slice (`slice_idx = 77`)
+Clips intensities to the 1st–99th percentile to suppress outlier voxels, normalizes to `[0,1]`, and resizes to 128×128.
+Of 369 patient folders, **368 loaded successfully** (1 failed/skipped). The loader also supports multi-slice sampling (`slice_range=(55,100)`, step 5) for richer training data, though the single-slice mode was used for the models trained here.
 
 ### 3.2 Exploratory Data Analysis
 Multi-modal visualization (FLAIR / T1 / T1ce / T2 / segmentation side-by-side) for sample tumor patients, class distribution, and tumor-area distribution were plotted. Key finding: the dataset is **imbalanced at the slice level** — **327 tumor slices (88.9%) vs. 41 healthy slices (11.1%)** — because slice 77 sits near the typical tumor peak for BraTS volumes, so most patients show a tumor at that exact slice.
@@ -73,10 +75,15 @@ A **patient-level stratified split** (avoiding data leakage between sets) produc
 | Test | 74 | 66 | 8 |
 
 ### 3.4 CNN tumor classifier
-A custom 3-block CNN (32 → 64 → 128 filters, each block: Conv2D ×2 + BatchNorm + MaxPool + Dropout) feeding a dense head (256 → 128 → 1, sigmoid), **8,711,649 parameters**. Compiled with Adam (`lr=0.001`), binary cross-entropy loss, and tracked accuracy/precision/recall/AUC. Trained with on-the-fly augmentation (rotation, shift, flip, zoom) for up to 50 epochs with early stopping on `val_auc` (patience 12), `ReduceLROnPlateau`, and checkpointing — training stopped early at **epoch 13**, restoring weights from the best epoch.
+A custom 3-block CNN (32 → 64 → 128 filters, each block: Conv2D ×2 + BatchNorm + MaxPool + Dropout) feeding a dense head (256 → 128 → 1, sigmoid), **8,711,649 parameters**. 
+Compiled with Adam (`lr=0.001`), binary cross-entropy loss, and tracked accuracy/precision/recall/AUC.
+Trained with on-the-fly augmentation (rotation, shift, flip, zoom) for up to 50 epochs with early stopping on `val_auc` (patience 12), `ReduceLROnPlateau`, and checkpointing — training stopped early at **epoch 13**, restoring weights from the best epoch.
 
 ### 3.5 U-Net tumor segmentation
-A standard encoder–decoder U-Net (32→64→128→256→512 channels at the bottleneck, with skip connections), **7,771,297 parameters**, trained to predict the binary Whole-Tumor mask. Loss = **BCE + Dice loss** (`bce_dice_loss`), tracked with Dice coefficient, IoU (Jaccard), and binary accuracy. A class weight (`tumor ≈ 33.3× background`) was applied to counter the foreground/background pixel imbalance (tumors occupy a small fraction of each 128×128 slice). Trained for the full 60 epochs with early stopping on `val_dice_coefficient` (patience 20) — validation Dice climbed steadily from ~0.06 to **~0.79** by the final epochs.
+A standard encoder–decoder U-Net (32→64→128→256→512 channels at the bottleneck, with skip connections), **7,771,297 parameters**, trained to predict the binary Whole-Tumor mask.
+Loss = **BCE + Dice loss** (`bce_dice_loss`), tracked with Dice coefficient, IoU (Jaccard), and binary accuracy.
+A class weight (`tumor ≈ 33.3× background`) was applied to counter the foreground/background pixel imbalance (tumors occupy a small fraction of each 128×128 slice). 
+Trained for the full 60 epochs with early stopping on `val_dice_coefficient` (patience 20) — validation Dice climbed steadily from ~0.06 to **~0.79** by the final epochs.
 
 ### 3.6 Tumor area estimation & 5-tier severity analysis
 A `TumorAnalyzer` class converts each predicted binary mask into clinical measurements (area, estimated volume, perimeter, circularity, equivalent diameter, bounding box), then assigns a severity tier using tumor area:
@@ -90,10 +97,12 @@ A `TumorAnalyzer` class converts each predicted binary mask into clinical measur
 | ≥ 2500 | Very Large | Critical Risk |
 
 ### 3.7 Explainability — Grad-CAM
-Grad-CAM is computed on a mid-encoder convolutional layer of the U-Net, highlighting which spatial regions most influenced the predicted tumor mask. Heatmaps are overlaid on the FLAIR input (masked to the brain region) and compared side-by-side with the ground-truth mask, for both tumor and healthy test cases.
+Grad-CAM is computed on a mid-encoder convolutional layer of the U-Net, highlighting which spatial regions most influenced the predicted tumor mask. 
+Heatmaps are overlaid on the FLAIR input (masked to the brain region) and compared side-by-side with the ground-truth mask, for both tumor and healthy test cases.
 
 ### 3.8 End-to-end pipeline & clinical report generation
-A `BrainTumorDetectionPipeline` class chains the two models together: **CNN classifies → if tumor detected, U-Net segments → `TumorAnalyzer` quantifies → a structured clinical report is generated.** The report includes patient ID, classification confidence, whole-tumor characteristics (area/volume/diameter/circularity), severity assessment, and a risk-tiered recommendation:
+A `BrainTumorDetectionPipeline` class chains the two models together: **CNN classifies → if tumor detected, U-Net segments → `TumorAnalyzer` quantifies → a structured clinical report is generated.** 
+The report includes patient ID, classification confidence, whole-tumor characteristics (area/volume/diameter/circularity), severity assessment, and a risk-tiered recommendation:
 
 | Risk level | Recommendation |
 |---|---|
